@@ -9,6 +9,9 @@
 #ifdef PDX_XV6
 #include "pdx-kernel.h"
 #endif // PDX_XV6
+#ifdef CS333_P2
+#include "uproc.h"
+#endif
 
 int
 sys_fork(void)
@@ -80,8 +83,7 @@ sys_sleep(void)
 // return how many clock tick interrupts have occurred
 // since start.
 int
-sys_uptime(void)
-{
+sys_uptime(void) {
   uint xticks;
 
   xticks = ticks;
@@ -98,3 +100,76 @@ sys_halt(void)
   return 0;
 }
 #endif // PDX_XV6
+
+#ifdef CS333_P1
+int
+sys_date (void)
+{
+  struct rtcdate *d;
+
+  if(argptr(0, (void*)&d, sizeof(struct rtcdate)) < 0)
+    return -1;
+  cmostime(d);
+  return 0;
+}
+
+int 
+sys_setuid (void) 
+{
+  int n;
+
+  if(argint(0, &n) < 0)
+ 	return -1; 
+  if(n < 0 || n > 32767)
+  	return -1;
+  setuid(n);
+  	return 0;
+}
+
+int
+sys_setgid (void) 
+{
+  int n;
+
+  if(argint(0, &n) < 0)
+ 	return -1; 
+  if(n < 0 || n > 32767)
+  	return -1;
+  return setgid(n);
+}
+
+int
+sys_getprocs (void)
+{
+  int max = 0;
+  struct uproc * table;
+  if(argint(0, &max) < 0 || argptr(1, (void*)&table, sizeof(*table) < 0))
+  	return -1;
+  return getprocs(max, table);
+}
+
+int
+sys_getuid (void)
+{
+  return getuid();
+}
+
+int
+sys_getgid (void)
+{
+  return getgid();
+}
+
+int
+sys_getppid(void)
+{
+  return getppid();
+}
+#endif // CS333 P2
+
+
+
+
+
+
+

@@ -6,6 +6,9 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#ifdef CS333_P2
+#include "uproc.h"
+#endif
 
 static char *states[] = {
 [UNUSED]    "unused",
@@ -97,6 +100,8 @@ allocproc(void)
     return 0;
   }
   p->state = EMBRYO;
+  p->cpu_ticks_in = 0;
+  p->cpu_ticks_total = 0;
   p->pid = nextpid++;
   release(&ptable.lock);
 
@@ -121,6 +126,7 @@ allocproc(void)
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  p->start_ticks = ticks;
   return p;
 }
 
@@ -147,7 +153,10 @@ userinit(void)
   p->tf->eflags = FL_IF;
   p->tf->esp = PGSIZE;
   p->tf->eip = 0;  // beginning of initcode.S
-
+  #ifdef CS333_P1
+  p->uid = DEFAULTUID;
+  p->gid = DEFAULTGID;
+  #endif
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
 
@@ -205,6 +214,10 @@ fork(void)
     return -1;
   }
   np->sz = curproc->sz;
+  #ifdef CS333_P2
+  np->gid = curproc->gid;
+  np->uid = curproc->uid;
+  #endif //P2
   np->parent = curproc;
   *np->tf = *curproc->tf;
 
@@ -356,6 +369,7 @@ scheduler(void)
       idle = 0;  // not idle this timeslice
 #endif // PDX_XV6
       c->proc = p;
+	  p->cpu_ticks_in = ticks;		// KT 10.12
       switchuvm(p);
       p->state = RUNNING;
       swtch(&(c->scheduler), p->context);
@@ -399,6 +413,7 @@ sched(void)
     panic("sched interruptible");
   intena = mycpu()->intena;
   swtch(&p->context, mycpu()->scheduler);
+  p->cpu_ticks_total = ticks - p->cpu_ticks_in;		// KT 10.12
   mycpu()->intena = intena;
 }
 
@@ -520,7 +535,32 @@ kill(int pid)
 // Print a process listing to console.  For debugging.
 // Runs when user types ^P on console.
 // No lock to avoid wedging a stuck machine further.
+/*
+void
+convert_ticks(proc *&p)
+{
+  struct proc *p = myproc();
+  char *state;
+    if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
+      state = states[p->state];
+    else
+      state = "???";
+  int time_elapsed = ticks - p->start_ticks;
+  int ex_ms = time_elapsed%1000;
+  int lhs = 0; 
+  if(time_elapsed >=1000) 
+  {
+    lhs = time_elapsed - ex_ms; 
+    lhs = lhs/1000;
+  }
+  if(ex_ms < 10)
+    cprintf("%d\t%s\t%d.00%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
+  else if(ex_ms < 100)
+	cprintf("%d\t%s\t%d.0%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
+  else
+	cprintf("%d\t%s\t%d.%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
 
+}*/
 void
 procdump(void)
 {
@@ -529,14 +569,32 @@ procdump(void)
   char *state;
   uint pc[10];
 
+  cprintf("PID\tName\tElapsed\tState\tSize\tPCs\n");
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == UNUSED)
       continue;
+	  
     if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d\t%s\t%s\t", p->pid, p->name, state);
+    // Converting ticks to seconds and milliseconds
+	
+
+    int time_elapsed = ticks - p->start_ticks;
+    int ex_ms = time_elapsed%1000;
+    int lhs = 0; 
+    if(time_elapsed >=1000) {
+      lhs = time_elapsed - ex_ms; 
+      lhs = lhs/1000;
+      }
+    if(ex_ms < 10)
+      cprintf("%d\t%s\t%d.00%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
+    else if(ex_ms < 100)
+      cprintf("%d\t%s\t%d.0%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
+    else
+      cprintf("%d\t%s\t%d.%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
+
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
@@ -545,3 +603,88 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+int
+getprocs (uint x, struct uproc * table)
+{
+
+  struct proc *p;
+  int n = 0;
+  char *state;
+  
+  for(p = ptable.proc; p < &ptable.proc[NPROC] && n < x; p++){
+    if(p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING || p->state == ZOMBIE)
+	{  
+	  acquire(&ptable.lock);
+	  // Set enum state to char array
+      if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
+      state = states[p->state];
+      else
+        state = "???";
+
+	  // Setting pid
+	  if(!p->parent)
+	  	table[n].ppid = p->pid;
+	  else
+	    table[n].ppid = p->parent->pid;
+
+	  table[n].pid = p->pid;
+      safestrcpy(table[n].name, p->name, sizeof(p->name));
+	  table[n].uid = p->uid;
+	  table[n].gid = p->gid;
+	  table[n].elapsed_ticks = ticks - p->cpu_ticks_total;
+	  table[n].CPU_total_ticks= p->cpu_ticks_total;
+	  safestrcpy(table[n].state, state, sizeof(state));
+	  table[n].size = p->sz;
+	  n++;
+	  release(&ptable.lock);
+	}
+	else
+      continue;
+	}
+  if(n > 0)
+    return n;
+  return -1;
+}
+
+
+int
+setuid (uint n)
+{
+  struct proc *p = myproc();
+  acquire(&ptable.lock);
+  p->uid = n;
+  release(&ptable.lock);
+  return 0;
+}
+
+int 
+setgid (uint n)
+{
+  struct proc *p = myproc();
+  acquire(&ptable.lock);
+  p->gid = n;
+  release(&ptable.lock);
+  return 0;
+}
+
+uint
+getuid (void)
+{
+  return myproc()->uid;
+}
+
+uint
+getgid (void)
+{
+  return myproc()->gid;
+}
+
+uint
+getppid (void)
+{
+  return myproc()->pid;
+}
+
+
+

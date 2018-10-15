@@ -15,3 +15,8 @@
 #else
 #define FSSIZE       1000  // size of file system in blocks
 #endif // PDX_XV6
+#ifdef CS333_P1
+#define DEFAULTUID	 0	   // default UID
+#define DEFAULTGID	 0	   // default GID
+#endif // CS333
+

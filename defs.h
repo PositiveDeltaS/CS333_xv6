@@ -1,3 +1,4 @@
+struct uproc;
 struct buf;
 struct context;
 struct file;
@@ -121,6 +122,14 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+#ifdef CS333_P2
+int				setuid(uint);
+int 			setgid(uint);
+uint			getuid(void);
+uint			getgid(void);
+uint			getppid(void);
+int				getprocs(uint, struct uproc*);
+#endif
 
 // swtch.S
 void            swtch(struct context**, struct context*);
