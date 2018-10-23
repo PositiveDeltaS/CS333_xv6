@@ -6,9 +6,6 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
-#ifdef CS333_P2
-#include "uproc.h"
-#endif
 
 static char *states[] = {
 [UNUSED]    "unused",
@@ -19,21 +16,9 @@ static char *states[] = {
 [ZOMBIE]    "zombie"
 };
 
-
-#ifdef CS333_P3
-#define statecount NELEM(states)
-struct ptrs {
-  struct proc * head;
-  struct proc * tail;
-};
-#endif
-
 static struct {
   struct spinlock lock;
   struct proc proc[NPROC];
-#ifdef CS333_P3
-  struct ptrs list[statecount];
-#endif
 } ptable;
 
 static struct proc *initproc;
@@ -42,11 +27,6 @@ uint nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
 static void wakeup1(void* chan);
-#ifdef CS333_P3
-static void initProcessLists(void);
-static void initFreeList(void);
-static void stateListAdd(struct ptrs*, struct proc*);
-#endif
 
 void
 pinit(void)
@@ -117,11 +97,9 @@ allocproc(void)
     return 0;
   }
   p->state = EMBRYO;
-#ifdef CS333_P2
   p->cpu_ticks_in = 0;
   p->cpu_ticks_total = 0;
   p->pid = nextpid++;
-#endif
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -154,10 +132,6 @@ allocproc(void)
 void
 userinit(void)
 {
-#ifdef CS333_P3
-  initProcessLists();
-  initFreeList();
-#endif
   struct proc *p;
   extern char _binary_initcode_start[], _binary_initcode_size[];
 
@@ -362,8 +336,6 @@ wait(void)
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
-
-#ifdef CS333_P3 // P3 Altered Scheduler function
 void
 scheduler(void)
 {
@@ -394,9 +366,7 @@ scheduler(void)
       idle = 0;  // not idle this timeslice
 #endif // PDX_XV6
       c->proc = p;
-#ifdef CS333_P2
 	  p->cpu_ticks_in = ticks;		// KT 10.12
-#endif
       switchuvm(p);
       p->state = RUNNING;
       swtch(&(c->scheduler), p->context);
@@ -416,62 +386,6 @@ scheduler(void)
 #endif // PDX_XV6
   }
 }
-
-#else // ORIGINAL SCHED FUNCTION
-void
-scheduler(void)
-{
-  struct proc *p;
-  struct cpu *c = mycpu();
-  c->proc = 0;
-#ifdef PDX_XV6
-  int idle;  // for checking if processor is idle
-#endif // PDX_XV6
-
-  for(;;){
-    // Enable interrupts on this processor.
-    sti();
-
-#ifdef PDX_XV6
-    idle = 1;  // assume idle unless we schedule a process
-#endif // PDX_XV6
-    // Loop over process table looking for process to run.
-    acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
-
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-#ifdef PDX_XV6
-      idle = 0;  // not idle this timeslice
-#endif // PDX_XV6
-      c->proc = p;
-#ifdef CS333_P2
-	  p->cpu_ticks_in = ticks;		// KT 10.12
-#endif
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
-    }
-    release(&ptable.lock);
-#ifdef PDX_XV6
-    // if idle, wait for next interrupt
-    if (idle) {
-      sti();
-      hlt();
-    }
-#endif // PDX_XV6
-  }
-}
-#endif // SCHEDULER
-
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
@@ -618,32 +532,7 @@ kill(int pid)
 // Print a process listing to console.  For debugging.
 // Runs when user types ^P on console.
 // No lock to avoid wedging a stuck machine further.
-/*
-void
-convert_ticks(proc *&p)
-{
-  struct proc *p = myproc();
-  char *state;
-    if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
-      state = states[p->state];
-    else
-      state = "???";
-  int time_elapsed = ticks - p->start_ticks;
-  int ex_ms = time_elapsed%1000;
-  int lhs = 0; 
-  if(time_elapsed >=1000) 
-  {
-    lhs = time_elapsed - ex_ms; 
-    lhs = lhs/1000;
-  }
-  if(ex_ms < 10)
-    cprintf("%d\t%s\t%d.00%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
-  else if(ex_ms < 100)
-	cprintf("%d\t%s\t%d.0%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
-  else
-	cprintf("%d\t%s\t%d.%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
 
-}*/
 void
 procdump(void)
 {
@@ -652,22 +541,15 @@ procdump(void)
   char *state;
   uint pc[10];
 
-  cprintf("PID\tName\tUID\tGID\tPPID\tElapsed\tCPU\tState\tSize\tPCs\n");
+  cprintf("PID\tName\tElapsed\tState\tSize\tPCs\n");
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == UNUSED)
       continue;
-	  
     if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
       state = states[p->state];
     else
       state = "???";
     // Converting ticks to seconds and milliseconds
-	int ppid;
-    if(!p->parent)	
-	  ppid = p->pid;
-	else
-	  ppid = p->parent->pid; 
-
     int time_elapsed = ticks - p->start_ticks;
     int ex_ms = time_elapsed%1000;
     int lhs = 0; 
@@ -676,11 +558,12 @@ procdump(void)
       lhs = lhs/1000;
       }
     if(ex_ms < 10)
-      cprintf("%d\t%s\t%d\t%d\t%d\t%d.00%d\t%d\t%s\t%d\t", p->pid, p->name, p->uid, p->gid, ppid, lhs, ex_ms, p->cpu_ticks_total, state, p->sz);
+      cprintf("%d\t%s\t%d.00%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
     else if(ex_ms < 100)
-      cprintf("%d\t%s\t%d\t%d\t%d\t%d.0%d\t%d\t%s\t%d\t", p->pid, p->name, p->uid, p->gid, ppid, lhs, ex_ms, p->cpu_ticks_total, state, p->sz);
+      cprintf("%d\t%s\t%d.0%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
     else
-      cprintf("%d\t%s\t%d\t%d\t%d\t%d.%d\t%d\t%s\t%d\t", p->pid, p->name, p->uid, p->gid, ppid, lhs, ex_ms, p->cpu_ticks_total, state, p->sz);
+      cprintf("%d\t%s\t%d.%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
+
 
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
@@ -691,53 +574,19 @@ procdump(void)
   }
 }
 
-#ifdef CS333_P2
 int
 getprocs (uint x, struct uproc * table)
 {
-
+/*
+  int i;
   struct proc *p;
-  int n = 0;
   char *state;
- if(x > 64)
- 	x = 64;
-
-  acquire(&ptable.lock);
-  for(p = ptable.proc; p < &ptable.proc[NPROC] && n < x; p++){
-    if(p->state == RUNNING || p->state == RUNNABLE || p->state == SLEEPING || p->state == ZOMBIE)
-	{  
-	  // Set enum state to char array
-      if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
-      state = states[p->state];
-      else
-        state = "???";
-
-	  // Setting pid
-	  if(!p->parent)
-	  	table[n].ppid = p->pid;
-	  else
-	    table[n].ppid = p->parent->pid;
-
-	  table[n].pid = p->pid;
-      safestrcpy(table[n].name, p->name, sizeof(p->name));
-	  table[n].uid = p->uid;
-	  table[n].gid = p->gid;
-	  table[n].elapsed_ticks = ticks - p->start_ticks;
-	  table[n].CPU_total_ticks= p->cpu_ticks_total;
-	  safestrcpy(table[n].state, state, sizeof(state));
-	  table[n].size = p->sz;
-	  n++;
-	}
-	else
-      continue;
-	}
-	
-	  release(&ptable.lock);
-  if(n > 0)
-    return n;
-  return -1;
+  uint pc[10];
+  */
+  
+  return 0;
 }
-#endif
+
 
 int
 setuid (uint n)
@@ -759,101 +608,23 @@ setgid (uint n)
   return 0;
 }
 
-
-// list management function prototypes
-
-//static void assertState(struct proc*, enum procstate, int);
-//static int  stateListRemove(struct ptrs*, struct proc* p);
-//static void promoteAll();
-
-// list management helper functions
-static void
-stateListAdd(struct ptrs* list, struct proc* p)
+uint
+getuid (void)
 {
-  if((*list).head == NULL){
-    (*list).head = p;
-    (*list).tail = p;
-    p->next = NULL;
-  } else{
-    ((*list).tail)->next = p;
-    (*list).tail = ((*list).tail)->next;
-    ((*list).tail)->next = NULL;
-  }
-}
-/*
-static int
-stateListRemove(struct ptrs* list, struct proc* p)
-{
-  if((*list).head == NULL || (*list).tail == NULL || p == NULL){
-    return -1;
-  }
-
-  struct proc* current = (*list).head;
-  struct proc* previous = 0;
-
-  if(current == p){
-    (*list).head = ((*list).head)->next;
-    // prevent tail remaining assigned when we've removed the only item
-    // on the list
-    if((*list).tail == p){
-      (*list).tail = NULL;
-    }
-    return 0;
-  }
-
-  while(current){
-    if(current == p){
-      break;
-    }
-
-    previous = current;
-    current = current->next;
-  }
-
-  // Process not found. return error
-  if(current == NULL){
-    return -1;
-  }
-
-  // Process found.
-  if(current == (*list).tail){
-    (*list).tail = previous;
-    ((*list).tail)->next = NULL;
-  } else{
-    previous->next = current->next;
-  }
-
-  // Make sure p->next doesn't point into the list.
-  p->next = NULL;
-
-  return 0;
-}
-*/
-static void
-initProcessLists()
-{
-  int i;
-
-  for (i = UNUSED; i <= ZOMBIE; i++) {
-    ptable.list[i].head = NULL;
-    ptable.list[i].tail = NULL;
-  }
-#ifdef CS333_P4
-  for (i = 0; i <= MAXPRIO; i++) {
-    ptable.ready[i].head = NULL;
-    ptable.ready[i].tail = NULL;
-  }
-#endif
+  return myproc()->uid;
 }
 
-static void
-initFreeList(void)
+uint
+getgid (void)
 {
-  struct proc* p;
-
-  for(p = ptable.proc; p < ptable.proc + NPROC; ++p){
-    p->state = UNUSED;
-    stateListAdd(&ptable.list[UNUSED], p);
-  }
+  return myproc()->gid;
 }
+
+uint
+getppid (void)
+{
+  return myproc()->pid;
+}
+
+
 

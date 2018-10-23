@@ -54,6 +54,9 @@ struct proc {
   uint gid;		       		   // added 10.10
   uint cpu_ticks_total; 	   // total elapsed ticks in cpu
   uint cpu_ticks_in;		   // ticks when scheduled
+#ifdef CS333_P3
+  struct proc * next;
+#endif
 };
 
 // Process memory is laid out contiguously, low addresses first:

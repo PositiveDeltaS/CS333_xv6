@@ -84,3 +84,13 @@ pdx-kernel.h
 halt.c
 date.h
 date.c
+
+# Kelsey's Programs
+ps.c
+time.c
+date.c
+ps.h
+p2-test.c
+uproc.h
+testsetuid.c
+testuidgid.c

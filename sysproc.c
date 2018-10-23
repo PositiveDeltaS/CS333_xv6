@@ -151,19 +151,24 @@ sys_getprocs (void)
 int
 sys_getuid (void)
 {
-  return getuid();
+  return myproc()->uid;
 }
 
 int
 sys_getgid (void)
 {
-  return getgid();
+  return myproc()->gid;
 }
 
 int
 sys_getppid(void)
 {
-  return getppid();
+  int ppid;
+  if(!myproc()->parent)
+    ppid = myproc()->pid;
+  else
+    ppid = myproc()->parent->pid;
+  return ppid;
 }
 #endif // CS333 P2
 
