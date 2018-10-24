@@ -46,8 +46,12 @@ static void wakeup1(void* chan);
 static void initProcessLists(void);
 static void initFreeList(void);
 static void stateListAdd(struct ptrs*, struct proc*);
-#endif
+static void assertState(struct proc*, enum procstate);
+static int  stateListRemove(struct ptrs*, struct proc* p);
+int ChangeState(struct proc *p, enum procstate from, enum procstate to);
+//static void promoteAll();
 
+#endif
 void
 pinit(void)
 {
@@ -100,6 +104,69 @@ myproc(void) {
 // state required to run in the kernel.
 // Otherwise return 0.
 static struct proc*
+#ifdef CS333_P3 // MODIFIED ALLOC PROC
+allocproc(void)
+{
+  struct proc *p;
+  char *sp;
+  acquire(&ptable.lock);
+  p = ptable.list[UNUSED].head; 
+  
+  int rv = stateListRemove(&ptable.list[p->state], p);
+  if(rv < 0) {
+    release(&ptable.lock);
+    return 0;
+  } 
+  assertState(p, UNUSED);
+  p->state = EMBRYO;
+  stateListAdd(&ptable.list[p->state], p);
+  
+#ifdef CS333_P2
+  p->cpu_ticks_in = 0;
+  p->cpu_ticks_total = 0;
+  p->pid = nextpid++;
+#endif
+  release(&ptable.lock);
+
+  // Allocate kernel stack.
+  if((p->kstack = kalloc()) == 0){
+  
+    acquire(&ptable.lock);	
+    int rv = stateListRemove(&ptable.list[p->state], p);
+    if(rv < 0) {
+      release(&ptable.lock);
+      return 0;
+    } 
+	
+	assertState(p, EMBRYO);
+    p->state = UNUSED;
+	stateListAdd(&ptable.list[p->state], p);
+	release(&ptable.lock);
+    return 0;
+	
+  }
+
+  sp = p->kstack + KSTACKSIZE;
+
+  // Leave room for trap frame.
+  sp -= sizeof *p->tf;
+  p->tf = (struct trapframe*)sp;
+
+  // Set up new context to start executing at forkret,
+  // which returns to trapret.
+  sp -= 4;
+  *(uint*)sp = (uint)trapret;
+
+  sp -= sizeof *p->context;
+  p->context = (struct context*)sp;
+  memset(p->context, 0, sizeof *p->context);
+  p->context->eip = (uint)forkret;
+
+  p->start_ticks = ticks;
+  return p;
+}
+#else
+
 allocproc(void)
 {
   struct proc *p;
@@ -148,7 +215,7 @@ allocproc(void)
   p->start_ticks = ticks;
   return p;
 }
-
+#endif // ALLOC PROC
 //PAGEBREAK: 32
 // Set up first user process.
 void
@@ -188,10 +255,16 @@ userinit(void)
   // writes to be visible, and the lock is also needed
   // because the assignment might not be atomic.
   acquire(&ptable.lock);
+  int rv = stateListRemove(&ptable.list[p->state], p);
+  if(rv < 0) {
+      release(&ptable.lock);
+      panic("user init fail");
+    } 
+  assertState(p, EMBRYO);
   p->state = RUNNABLE;
+  stateListAdd(&ptable.list[p->state], p);
   release(&ptable.lock);
 }
-
 // Grow current process's memory by n bytes.
 // Return 0 on success, -1 on failure.
 int
@@ -762,9 +835,6 @@ setgid (uint n)
 
 // list management function prototypes
 
-//static void assertState(struct proc*, enum procstate, int);
-//static int  stateListRemove(struct ptrs*, struct proc* p);
-//static void promoteAll();
 
 // list management helper functions
 static void
@@ -780,7 +850,7 @@ stateListAdd(struct ptrs* list, struct proc* p)
     ((*list).tail)->next = NULL;
   }
 }
-/*
+
 static int
 stateListRemove(struct ptrs* list, struct proc* p)
 {
@@ -828,7 +898,7 @@ stateListRemove(struct ptrs* list, struct proc* p)
 
   return 0;
 }
-*/
+
 static void
 initProcessLists()
 {
@@ -856,4 +926,31 @@ initFreeList(void)
     stateListAdd(&ptable.list[UNUSED], p);
   }
 }
+
+static void 
+assertState(struct proc* p, enum procstate assumed) {
+   
+  if(p->state == assumed)
+    return;
+  panic("Pstate not as expected");
+}
+
+#ifdef CS333_P3
+int ChangeState(struct proc *p, enum procstate from, enum procstate to) {
+
+  acquire(&ptable.lock);
+  int rv = stateListRemove(&ptable.list[p->state], p);
+  if(rv < 0) {
+      release(&ptable.lock);
+      return -1;
+    } 
+  assertState(p, from);
+  p->state = to;
+  stateListAdd(&ptable.list[p->state], p);
+  release(&ptable.lock);
+  return 0;
+}
+
+#endif
+
 
