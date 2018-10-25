@@ -49,6 +49,7 @@ static void stateListAdd(struct ptrs*, struct proc*);
 static void assertState(struct proc*, enum procstate);
 static int  stateListRemove(struct ptrs*, struct proc* p);
 int ChangeState(struct proc *p, enum procstate from, enum procstate to);
+int searchList(int pid, enum procstate list_name);
 //static void promoteAll();
 
 #endif
@@ -130,6 +131,7 @@ allocproc(void)
 
   // Allocate kernel stack.
   if((p->kstack = kalloc()) == 0){
+
   
     acquire(&ptable.lock);	
     int rv = stateListRemove(&ptable.list[p->state], p);
@@ -143,7 +145,7 @@ allocproc(void)
 	stateListAdd(&ptable.list[p->state], p);
 	release(&ptable.lock);
     return 0;
-	
+
   }
 
   sp = p->kstack + KSTACKSIZE;
@@ -254,16 +256,17 @@ userinit(void)
   // run this process. the acquire forces the above
   // writes to be visible, and the lock is also needed
   // because the assignment might not be atomic.
+  #ifdef CS333_P3
+
   acquire(&ptable.lock);
-  int rv = stateListRemove(&ptable.list[p->state], p);
-  if(rv < 0) {
-      release(&ptable.lock);
-      panic("user init fail");
-    } 
-  assertState(p, EMBRYO);
-  p->state = RUNNABLE;
-  stateListAdd(&ptable.list[p->state], p);
+  ChangeState(p, EMBRYO, RUNNABLE);
   release(&ptable.lock);
+  #else 
+  acquire(&ptable.lock);
+  p->state = RUNNABLE;
+  release(&ptable.lock);
+  #endif
+  
 }
 // Grow current process's memory by n bytes.
 // Return 0 on success, -1 on failure.
@@ -301,13 +304,25 @@ fork(void)
   if((np = allocproc()) == 0){
     return -1;
   }
-
+  
   // Copy process state from proc.
   if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
+  acquire(&ptable.lock);
+  #ifdef CS333_P3
+  assertState(np, EMBRYO);
+  stateListRemove(&ptable.list[np->state], np);
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
-    return -1;
+  stateListAdd(&ptable.list[np->state], np);
+  release(&ptable.lock);
+  #else
+    kfree(np->kstack);
+    np->kstack = 0;
+    np->state = UNUSED;
+    release(&ptable.lock);
+  #endif
+  return -1;
   }
   np->sz = curproc->sz;
   #ifdef CS333_P2
@@ -328,10 +343,23 @@ fork(void)
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
-
+  #ifdef CS333_P3
+  acquire(&ptable.lock);
+  int rv = stateListRemove(&ptable.list[np->state], np);
+  if(rv < 0) {
+      release(&ptable.lock);
+	  panic("ChangeState function could not remove from list");
+    } 
+  assertState(np, EMBRYO);
+  np->state = RUNNABLE;
+  stateListAdd(&ptable.list[np->state], np);
+  release(&ptable.lock);
+  //ChangeState(np, EMBRYO, RUNNABLE);
+  #else
   acquire(&ptable.lock);
   np->state = RUNNABLE;
   release(&ptable.lock);
+  #endif
 
   return pid;
 }
@@ -339,6 +367,52 @@ fork(void)
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
 // until its parent calls wait() to find out it exited.
+#ifdef CS333_P3
+void
+exit(void)
+{
+  struct proc *curproc = myproc();
+  struct proc *p;
+  int fd;
+
+  if(curproc == initproc)
+    panic("init exiting");
+
+  // Close all open files.
+  for(fd = 0; fd < NOFILE; fd++){
+    if(curproc->ofile[fd]){
+      fileclose(curproc->ofile[fd]);
+      curproc->ofile[fd] = 0;
+    }
+  }
+
+  begin_op();
+  iput(curproc->cwd);
+  end_op();
+  curproc->cwd = 0;
+
+  acquire(&ptable.lock);
+
+  // Parent might be sleeping in wait().
+  wakeup1(curproc->parent);
+
+  // Pass abandoned children to init.
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->parent == curproc){
+      p->parent = initproc;
+      if(p->state == ZOMBIE)
+        wakeup1(initproc);
+    }
+  }
+
+  // Jump into the scheduler, never to return.
+  enum procstate from = curproc->state;
+  ChangeState(curproc, from, ZOMBIE);
+  sched();
+  panic("zombie exit");
+}
+#else
+
 void
 exit(void)
 {
@@ -381,7 +455,7 @@ exit(void)
   sched();
   panic("zombie exit");
 }
-
+#endif
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
 int
@@ -435,7 +509,7 @@ wait(void)
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
-
+/*
 #ifdef CS333_P3 // P3 Altered Scheduler function
 void
 scheduler(void)
@@ -456,10 +530,15 @@ scheduler(void)
 #endif // PDX_XV6
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
+	p = ptable.list[RUNNABLE].head;
+	while (p) {
 
+    int rv = stateListRemove(&ptable.list[p->state], p);
+    if(rv < 0) {
+      release(&ptable.lock);
+	  panic("ChangeState function could not remove from list");
+    } 
+      assertState(p, RUNNABLE);
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
@@ -467,18 +546,20 @@ scheduler(void)
       idle = 0;  // not idle this timeslice
 #endif // PDX_XV6
       c->proc = p;
+      switchuvm(p);
 #ifdef CS333_P2
 	  p->cpu_ticks_in = ticks;		// KT 10.12
 #endif
-      switchuvm(p);
       p->state = RUNNING;
+      stateListAdd(&ptable.list[RUNNING], p);
       swtch(&(c->scheduler), p->context);
       switchkvm();
-
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
-    }
+	  p = ptable.list[RUNNABLE].head;
+  }
+
     release(&ptable.lock);
 #ifdef PDX_XV6
     // if idle, wait for next interrupt
@@ -491,6 +572,7 @@ scheduler(void)
 }
 
 #else // ORIGINAL SCHED FUNCTION
+*/
 void
 scheduler(void)
 {
@@ -543,7 +625,7 @@ scheduler(void)
 #endif // PDX_XV6
   }
 }
-#endif // SCHEDULER
+//#endif // SCHEDULER
 
 
 // Enter scheduler.  Must hold only ptable.lock
@@ -645,6 +727,19 @@ sleep(void *chan, struct spinlock *lk)
 //PAGEBREAK!
 // Wake up all processes sleeping on chan.
 // The ptable lock must be held.
+#ifdef CS333_P3
+static void
+wakeup1(void *chan)
+{
+  struct proc *p;
+  p = ptable.list[SLEEPING].head;
+  while(p) {
+    if(p->state == SLEEPING && p->chan == chan) {
+	  ChangeState(p, SLEEPING, RUNNABLE);
+	  }
+	  p = ptable.list[SLEEPING].head->next;
+}
+#else
 static void
 wakeup1(void *chan)
 {
@@ -654,6 +749,7 @@ wakeup1(void *chan)
     if(p->state == SLEEPING && p->chan == chan)
       p->state = RUNNABLE;
 }
+#endif
 
 // Wake up all processes sleeping on chan.
 void
@@ -667,6 +763,48 @@ wakeup(void *chan)
 // Kill the process with the given pid.
 // Process won't exit until it returns
 // to user space (see trap in trap.c).
+#ifdef CS333_P3
+int
+kill(int pid)
+{
+  acquire(&ptable.lock);
+  int found = 0;
+  int end = 0;
+  while(found == 0 && end != 1) {
+  if((found = searchList(pid, RUNNING)) == 1)
+    break;
+  if((found = searchList(pid, RUNNABLE)) == 1)
+    break;
+  if((found = searchList(pid, EMBRYO)) == 1)
+    break;
+  if((found = searchList(pid, SLEEPING)) == 1)
+    break;
+  end = 1;
+	  }
+  release(&ptable.lock);
+
+  if(found == 0)
+    return -1;
+  return 0;
+
+
+}
+int searchList(int pid, enum procstate list_name) {
+
+  struct proc *p = ptable.list[list_name].head;
+  while(p) {
+    if(p->pid == pid) {
+	  p->killed = 1;
+      if(p->state == SLEEPING)
+	    ChangeState(p, SLEEPING, RUNNABLE); 
+      release(&ptable.lock);
+	  return 1;
+	  }
+	  p = ptable.list[list_name].head->next;
+	}
+	return 0;
+}
+#else
 int
 kill(int pid)
 {
@@ -686,7 +824,7 @@ kill(int pid)
   release(&ptable.lock);
   return -1;
 }
-
+#endif
 //PAGEBREAK: 36
 // Print a process listing to console.  For debugging.
 // Runs when user types ^P on console.
@@ -938,16 +1076,14 @@ assertState(struct proc* p, enum procstate assumed) {
 #ifdef CS333_P3
 int ChangeState(struct proc *p, enum procstate from, enum procstate to) {
 
-  acquire(&ptable.lock);
   int rv = stateListRemove(&ptable.list[p->state], p);
   if(rv < 0) {
       release(&ptable.lock);
-      return -1;
+	  panic("ChangeState function could not remove from list");
     } 
   assertState(p, from);
   p->state = to;
   stateListAdd(&ptable.list[p->state], p);
-  release(&ptable.lock);
   return 0;
 }
 
