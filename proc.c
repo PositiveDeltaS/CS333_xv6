@@ -27,13 +27,19 @@ struct ptrs {
   struct proc * tail;
 };
 #endif //CS333_P3
-
+#ifdef CS333_P4
+#define MAXPRIO 6
+#endif //CS333_P4
 static struct {
   struct spinlock lock;
   struct proc proc[NPROC];
 #ifdef CS333_P3
   struct ptrs list[statecount];
 #endif //CS333_P3
+#ifdef CS333_P4
+  struct ptrs ready [MAXPRIO +1];
+  uint PromoteAtTime;
+#endif //CS333_P4
 } ptable;
 
 static struct proc *initproc;
@@ -50,7 +56,11 @@ static void assertState(struct proc*, enum procstate);
 static int  stateListRemove(struct ptrs*, struct proc* p);
 int ChangeState(struct proc *p, enum procstate from, enum procstate to);
 int searchList(int pid, enum procstate list_name);
+#ifdef CS333_P4
+int setpriority(int pid, int priority);
+int getpriority(int pid);
 //static void promoteAll();
+#endif //CS333_P4
 #endif //CS333_P3
 
 
@@ -898,32 +908,6 @@ kill(int pid)
 // Print a process listing to console.  For debugging.
 // Runs when user types ^P on console.
 // No lock to avoid wedging a stuck machine further.
-/*
-void
-convert_ticks(proc *&p)
-{
-  struct proc *p = myproc();
-  char *state;
-    if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
-      state = states[p->state];
-    else
-      state = "???";
-  int time_elapsed = ticks - p->start_ticks;
-  int ex_ms = time_elapsed%1000;
-  int lhs = 0; 
-  if(time_elapsed >=1000) 
-  {
-    lhs = time_elapsed - ex_ms; 
-    lhs = lhs/1000;
-  }
-  if(ex_ms < 10)
-    cprintf("%d\t%s\t%d.00%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
-  else if(ex_ms < 100)
-	cprintf("%d\t%s\t%d.0%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
-  else
-	cprintf("%d\t%s\t%d.%d\t%s\t%d\t", p->pid, p->name, lhs, ex_ms, state, p->sz);
-
-}*/
 #ifdef CS333_P3
 void 
 displaylists(enum procstate listchoice)
@@ -1079,6 +1063,28 @@ setgid (uint n)
   return 0;
 }
 #ifdef CS333_P3
+#ifdef CS333_P4
+int
+setpriority (int pid, int priority)
+{
+  for(enum procstate i = SLEEPING; i <= RUNNING; ++i)
+  {
+    struct proc * p = ptable.list[i].head;
+    while(p)
+    {
+      struct proc * next = p->next;
+      if(p->pid == pid)
+	  {
+	    p->priority = priority;
+		//reset budget
+		return 0;
+	  }
+	  p = next;
+    }
+  }
+  return -1; 
+}
+#endif //CS333_P4
 // list management helper functions
 static void
 stateListAdd(struct ptrs* list, struct proc* p)
