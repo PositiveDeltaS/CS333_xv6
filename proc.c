@@ -60,6 +60,7 @@ int searchList(int pid, enum procstate list_name);
 int setpriority(int pid, int priority);
 int getpriority(int pid);
 //static void promoteAll();
+static void demotion(struct proc * p, enum procstate old);
 #endif //CS333_P4
 #endif //CS333_P3
 
@@ -473,32 +474,51 @@ wait(void)
   acquire(&ptable.lock);
   for(;;){
     // Scan through table looking for exited children.
-    havekids = 0;
-	for(int i = EMBRYO; i <= ZOMBIE; ++i) {
-	  p = ptable.list[i].head;
-	  while(p){
-	    struct proc * next = p->next;
-        if(p->parent == curproc){
-          havekids = 1;
-		  if(p->state == ZOMBIE){
-		    // Found one.
-		    pid = p->pid;
-		    kfree(p->kstack);
-		    p->kstack = 0;
-		    freevm(p->pgdir);
-		    p->pid = 0;
-		    p->parent = 0;
-		    p->name[0] = 0;
-		    p->killed = 0;
-		    ChangeState(p, ZOMBIE, UNUSED);
-		    release(&ptable.lock);
-		    return pid;
-		    }
-         }
-		p = next;
-	  }
-    }
-    // No point waiting if we don't have any children.
+    havekids = 0;  
+		for(int i = EMBRYO; i <= ZOMBIE; ++i) {
+			if(i == RUNNABLE) {
+				for(int i = MAXPRIO; i >= 0; i--) {
+					struct proc * current = ptable.ready[i].head; 
+					while(current) {
+						struct proc * next = current->next;
+						if(p->parent == curproc)
+							havekids = 1;
+						current = next;
+					}
+				}
+			}
+			if(i == EMBRYO || i == SLEEPING || i == RUNNING) { 
+				struct proc * current = ptable.ready[i].head; 
+				while(current) {
+					struct proc * next = current->next;
+					if(p->parent == curproc)
+						havekids = 1;
+					current = next;
+				}
+			}
+			if(i == ZOMBIE) {
+				struct proc * current = ptable.list[i].head;
+				while(current)
+					struct proc * next = current->next;
+					if(p->parent == curproc) {
+						havekids = 1; 
+						pid = p->pid;
+						kfree(p->kstack);
+						p->kstack = 0;
+						freevm(p->pgdir);
+						p->pid = 0;
+						p->parent = 0;
+						p->name[0] = 0;
+						p->killed = 0;
+						p->state = UNUSED;
+						release(&ptable.lock);
+						return pid;
+				}
+				current = next;
+			}
+		}
+		
+		// No point waiting if we don't have any children.
     if(!havekids || curproc->killed){
       release(&ptable.lock);
       return -1;
@@ -717,20 +737,10 @@ sched(void)
 void
 yield(void)
 {
-  int rv;
   struct proc *p = myproc();
 
   acquire(&ptable.lock);  //DOC: yieldlock
-  if((rv = stateListRemove(&ptable.list[RUNNING], p)) < 0)
-    panic("Could not remove from state list in yield()");
-  assertState(p, RUNNING);
-  p->budget = p->budget - (ticks - p->start_ticks);
-  if(p->budget >= BUDGET && p->priority > 0) {
-    p->priority = p->priority-1;
-	p->budget = BUDGET;
-  }
-  p->state = RUNNABLE;
-  stateListAdd(&ptable.ready[p->priority], p);
+  demotion(p, RUNNING);
   sched();
   release(&ptable.lock);
 }
@@ -850,9 +860,9 @@ wakeup1(void *chan)
   while(p) {
   struct proc * temp = p->next;
     if(p->state == SLEEPING && p->chan == chan) {
-	  ChangeState(p, SLEEPING, RUNNABLE);
-	  }
-	  p = temp;
+	  demotion(p, SLEEPING);
+	}
+  p = temp;
   }
 }
 #else
@@ -903,7 +913,7 @@ int searchList(int pid, enum procstate list_name) {
     if(p->pid == pid) {
 	  p->killed = 1;
       if(p->state == SLEEPING) 
-	    ChangeState(p, SLEEPING, RUNNABLE); 
+		demotion(p, SLEEPING);
       release(&ptable.lock);
 	  return 1;
 	  }
@@ -951,10 +961,13 @@ displaylists(enum procstate listchoice)
 	  return;
 	}
   if(listchoice == RUNNABLE) {
-	while(current) {
-	  cprintf("(%d, %d) -> ", current->pid, current->budget);
-	  current = current->next;
-	 }
+    for(int i = MAXPRIO; i >= 0; i--) {
+	  current = ptable.ready[i].head;
+	  while(current) {
+	    cprintf("(%d, %d) -> ", current->pid, current->budget);
+	    current = current->next;
+	   }
+    }
   }
   if(listchoice == SLEEPING) {
 	while(current) {
@@ -1200,6 +1213,21 @@ initProcessLists()
 #endif //CS333_P4
 }
 #ifdef CS333_P4
+static void
+demotion(struct proc * p, enum procstate old)
+{
+  int rv;
+  if((rv = stateListRemove(&ptable.list[old], p)) < 0)
+    panic("Could not remove from state list in demotion()");
+  assertState(p, old);
+  p->budget = p->budget - (ticks - p->start_ticks);
+  if(p->budget >= BUDGET && p->priority > 0) {
+    p->priority = p->priority-1;
+	p->budget = BUDGET;
+  }
+  p->state = RUNNABLE;
+  stateListAdd(&ptable.ready[p->priority], p);
+}
 /*
 static void 
 promoteAll()
@@ -1269,5 +1297,63 @@ int ChangeState(struct proc *p, enum procstate from, enum procstate to) {
   return 0;
 }
 #endif //CS333_P3
+
+/*
+
+  for(;;){
+    // Scan through table looking for exited children.
+ 	for(int i = EMBRYO; i <= ZOMBIE; ++i) {
+	  if(i == RUNNABLE) {
+	    for(int i = MAXPRIO; i >= 0; i--) {
+         struct proc * current = ptable.ready[i].head; 
+		   while(current) {
+             struct proc * next = current->next;
+             if(p->parent == curproc)
+               havekids = 1;
+			 current = next;
+		   }
+	   }
+	  }
+	  else {
+	    p = ptable.list[i].head;
+	    while(p){
+	    struct proc * next = p->next;
+        if(p->parent == curproc){
+          havekids = 1;
+		  if(p->state == ZOMBIE){
+		    // Found one.
+		    pid = p->pid;
+		    kfree(p->kstack);
+		    p->kstack = 0;
+		    freevm(p->pgdir);
+		    p->pid = 0;
+		    p->parent = 0;
+		    p->name[0] = 0;
+		    p->killed = 0;
+		    ChangeState(p, ZOMBIE, UNUSED);
+		    release(&ptable.lock);
+		    return pid;
+		    }
+         }
+		p = next;
+	  }
+    }
+	}
+    // No point waiting if we don't have any children.
+    if(!havekids || curproc->killed){
+      release(&ptable.lock);
+      return -1;
+    }
+*/
+
+
+
+
+
+
+
+
+
+
 
 
