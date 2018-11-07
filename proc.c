@@ -19,7 +19,10 @@ static char *states[] = {
 [ZOMBIE]    "zombie"
 };
 
-
+#ifdef CS333_P4
+#define TICKS_TO_PROMOTE 3000
+#define BUDGET 300
+#endif //CS333_P4
 #ifdef CS333_P3
 #define statecount NELEM(states)
 struct ptrs {
@@ -216,6 +219,9 @@ allocproc(void)
 void
 userinit(void)
 {
+#ifdef CS333_P4
+  ptable.PromoteAtTime = ticks + TICKS_TO_PROMOTE;
+#endif //CS333_P4
 #ifdef CS333_P3
   acquire(&ptable.lock);
   initProcessLists();
@@ -224,7 +230,6 @@ userinit(void)
 #endif //CS333_P3
   struct proc *p;
   extern char _binary_initcode_start[], _binary_initcode_size[];
-
   p = allocproc();
 
   initproc = p;
@@ -251,19 +256,20 @@ userinit(void)
   // run this process. the acquire forces the above
   // writes to be visible, and the lock is also needed
   // because the assignment might not be atomic.
-  #ifdef CS333_P3
-
+  #ifdef CS333_P4
   acquire(&ptable.lock);
-  ChangeState(p, EMBRYO, RUNNABLE);
-  if((rv = setpriority(p->pid, MAXPRIO)) < 0)
-    panic("Could not set priority in userinit");
+  stateListRemove(&ptable.list[EMBRYO], p);
+  assertState(p, EMBRYO);
+  p->priority = MAXPRIO;
+  p->budget = BUDGET;
+  p->state = RUNNABLE;
   stateListAdd(&ptable.ready[MAXPRIO], p);
   release(&ptable.lock);
   #else 
   acquire(&ptable.lock);
   p->state = RUNNABLE;
   release(&ptable.lock);
-  #endif //CS333_P3
+  #endif //CS333_P4
   
 }
 // Grow current process's memory by n bytes.
@@ -340,9 +346,11 @@ fork(void)
   pid = np->pid;
   #ifdef CS333_P3
   acquire(&ptable.lock);
-  ChangeState(np, np->state, RUNNABLE);
-  if((rv = setpriority(np->pid, MAXPRIO)) < 0)
-    panic("Could not set priority in fork");
+  stateListRemove(&ptable.list[EMBRYO], np);
+  assertState(np, EMBRYO);
+  np->priority = MAXPRIO;
+  np->budget = BUDGET;
+  np->state = RUNNABLE;
   stateListAdd(&ptable.ready[MAXPRIO], np);
   release(&ptable.lock);
   #else
@@ -564,7 +572,14 @@ scheduler(void)
 #ifdef PDX_XV6
   int idle;  // for checking if processor is idle
 #endif // PDX_XV6
-
+#ifdef CS333_P4
+  if(ticks >= ptable.PromoteAtTime) {
+    acquire(&ptable.lock);
+    //promoteAll();
+    ptable.PromoteAtTime = ticks + TICKS_TO_PROMOTE;
+	release(&ptable.lock);
+  }
+#endif //CS333_P4
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -574,14 +589,14 @@ scheduler(void)
 #endif // PDX_XV6
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-	p = ptable.list[RUNNABLE].head;
+	p = ptable.ready[MAXPRIO].head;
 	if (p) {
-    int rv = stateListRemove(&ptable.list[p->state], p);
+    int rv = stateListRemove(&ptable.ready[MAXPRIO], p);
     if(rv < 0) {
       release(&ptable.lock);
-	  panic("ChangeState function could not remove from list");
+	  panic("ChangeState function could not remove from list in scheduler");
     } 
-    assertState(p, RUNNABLE);
+	assertState(p, RUNNABLE);
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
@@ -693,7 +708,7 @@ sched(void)
     panic("sched interruptible");
   intena = mycpu()->intena;
   swtch(&p->context, mycpu()->scheduler);
-  p->cpu_ticks_total = ticks - p->cpu_ticks_in;		// KT 10.12
+  p->cpu_ticks_total = ticks - p->cpu_ticks_in;	
   mycpu()->intena = intena;
 }
 
@@ -702,10 +717,20 @@ sched(void)
 void
 yield(void)
 {
-  struct proc *curproc = myproc();
+  int rv;
+  struct proc *p = myproc();
 
   acquire(&ptable.lock);  //DOC: yieldlock
-  ChangeState(curproc, curproc->state, RUNNABLE);
+  if((rv = stateListRemove(&ptable.list[RUNNING], p)) < 0)
+    panic("Could not remove from state list in yield()");
+  assertState(p, RUNNING);
+  p->budget = p->budget - (ticks - p->start_ticks);
+  if(p->budget >= BUDGET && p->priority > 0) {
+    p->priority = p->priority-1;
+	p->budget = BUDGET;
+  }
+  p->state = RUNNABLE;
+  stateListAdd(&ptable.ready[p->priority], p);
   sched();
   release(&ptable.lock);
 }
@@ -925,7 +950,13 @@ displaylists(enum procstate listchoice)
       release(&ptable.lock);   
 	  return;
 	}
-  if(listchoice == SLEEPING || listchoice == RUNNABLE) {
+  if(listchoice == RUNNABLE) {
+	while(current) {
+	  cprintf("(%d, %d) -> ", current->pid, current->budget);
+	  current = current->next;
+	 }
+  }
+  if(listchoice == SLEEPING) {
 	while(current) {
 	  cprintf("%d -> ", current->pid);
 	  current = current->next;
@@ -1025,6 +1056,7 @@ getprocs (uint x, struct uproc * table)
 	  else
 	    table[n].ppid = p->parent->pid;
 
+	  table[n].priority = p->priority;
 	  table[n].pid = p->pid;
       safestrcpy(table[n].name, p->name, sizeof(p->name));
 	  table[n].uid = p->uid;
@@ -1079,7 +1111,7 @@ setpriority (int pid, int priority)
       if(p->pid == pid)
 	  {
 	    p->priority = priority;
-		//reset budget
+		p->budget = BUDGET;
 		return 0;
 	  }
 	  p = next;
@@ -1167,6 +1199,43 @@ initProcessLists()
   }
 #endif //CS333_P4
 }
+#ifdef CS333_P4
+/*
+static void 
+promoteAll()
+{
+  struct proc * current;
+  for(int i = MAXPRIO-1; i >=0; --i)
+  {
+    current = ptable.ready[i].head;
+	while(current)
+	{
+	  struct proc * next = current->next;
+      stateListRemove(&ptable.ready[i], current);
+	  current->priority = i+1;
+      stateListAdd(&ptable.ready[i+1], current);
+	  current = next;
+	}
+  }
+  current = ptable.list[SLEEPING].head;
+  while(current)
+  {
+    struct proc * next = current->next;
+	if(current->priority < MAXPRIO)
+	  ++current->priority;
+	current = next;
+  }
+  current = ptable.list[RUNNING].head;
+  while(current)
+  {
+    struct proc * next = current->next;
+	if(current->priority < MAXPRIO)
+	  ++current->priority;
+	current = next;
+  }
+}
+*/
+#endif //CS333_P4
 
 static void
 initFreeList(void)
