@@ -27,9 +27,6 @@ struct ptrs {
   struct proc * tail;
 };
 #endif //CS333_P3
-#ifdef CS333_P4
-#define MAXPRIO 6
-#endif //CS333_P4
 static struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -258,6 +255,9 @@ userinit(void)
 
   acquire(&ptable.lock);
   ChangeState(p, EMBRYO, RUNNABLE);
+  if((rv = setpriority(p->pid, MAXPRIO)) < 0)
+    panic("Could not set priority in userinit");
+  stateListAdd(&ptable.ready[MAXPRIO], p);
   release(&ptable.lock);
   #else 
   acquire(&ptable.lock);
@@ -341,6 +341,9 @@ fork(void)
   #ifdef CS333_P3
   acquire(&ptable.lock);
   ChangeState(np, np->state, RUNNABLE);
+  if((rv = setpriority(np->pid, MAXPRIO)) < 0)
+    panic("Could not set priority in fork");
+  stateListAdd(&ptable.ready[MAXPRIO], np);
   release(&ptable.lock);
   #else
   acquire(&ptable.lock);
