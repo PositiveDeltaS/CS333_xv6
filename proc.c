@@ -466,7 +466,6 @@ exit(void)
 int
 wait(void)
 {
-  struct proc *p;
   int havekids;
   uint pid;
   struct proc *curproc = myproc();
@@ -476,30 +475,20 @@ wait(void)
     // Scan through table looking for exited children.
     havekids = 0;  
 		for(int i = EMBRYO; i <= ZOMBIE; ++i) {
+
+			struct proc * p = ptable.list[i].head; 
 			if(i == RUNNABLE) {
 				for(int i = MAXPRIO; i >= 0; i--) {
-					struct proc * current = ptable.ready[i].head; 
-					while(current) {
-						struct proc * next = current->next;
-						if(p->parent == curproc)
-							havekids = 1;
-						current = next;
-					}
+					p = ptable.ready[i].head; 
+					waitscan(p);
 				}
 			}
 			if(i == EMBRYO || i == SLEEPING || i == RUNNING) { 
-				struct proc * current = ptable.ready[i].head; 
-				while(current) {
-					struct proc * next = current->next;
-					if(p->parent == curproc)
-						havekids = 1;
-					current = next;
-				}
+				waitscan(p);
 			}
 			if(i == ZOMBIE) {
-				struct proc * current = ptable.list[i].head;
-				while(current)
-					struct proc * next = current->next;
+				while(p) {
+					struct proc * next = p->next;
 					if(p->parent == curproc) {
 						havekids = 1; 
 						pid = p->pid;
@@ -513,8 +502,9 @@ wait(void)
 						p->state = UNUSED;
 						release(&ptable.lock);
 						return pid;
+					}
+				  p = next;
 				}
-				current = next;
 			}
 		}
 		
@@ -898,9 +888,24 @@ kill(int pid)
   
   acquire(&ptable.lock); 
   for(enum procstate i = EMBRYO; i <= RUNNING && found == 0; ++i) {
-   found = searchList(pid, i);
+	  if(i == RUNNABLE) {
+      for(int i = MAXPRIO; i >= 0; i--) {
+        struct proc * current = ptable.ready[i].head;
+				while(current) {
+          struct proc * next = current->next;
+					if(p->pid == pid) {
+					  p->killed = 1;
+						found = 1;
+						release(&ptable.lock);
+						return 0;
+					}
+					current = next;
+				}
+			}
+		} else 
+      found = searchList(pid, i);
    }
-
+  release(&ptable.lock);
   if(found == 0)
     return -1;
   return 0;
@@ -909,13 +914,18 @@ int searchList(int pid, enum procstate list_name) {
 
   struct proc *p = ptable.list[list_name].head;
   while(p) {
-  struct proc * next = p->next;
-    if(p->pid == pid) {
-	  p->killed = 1;
-      if(p->state == SLEEPING) 
-		demotion(p, SLEEPING);
-      release(&ptable.lock);
-	  return 1;
+		struct proc * next = p->next;
+		if(p->pid == pid) {
+			p->killed = 1;
+			if(p->state == SLEEPING) {
+				int rv;
+				if((rv = stateListRemove(&ptable.list[SLEEPING], p)) < 0)
+					panic("Could not remove from state list in searchlist()");
+				assertState(p, SLEEPING);
+				p->state = RUNNABLE;
+				stateListAdd(&ptable.ready[p->priority], p);
+		  }	
+			return 1;	
 	  }
 	  p = next;
 	}
@@ -1345,8 +1355,18 @@ int ChangeState(struct proc *p, enum procstate from, enum procstate to) {
       return -1;
     }
 */
+void
+waitscan(struct proc* current) {
+  if(!current)
+	  return;
 
-
+	while(current) {
+    struct proc * next = current->next;
+		if(current->parent == curproc)
+			havekids = 1;				
+		current = next;
+	}
+}
 
 
 
