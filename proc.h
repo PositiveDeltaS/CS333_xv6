@@ -10,6 +10,8 @@ struct cpu {
   struct proc *proc;           // The process running on this cpu or null
 };
 
+#ifdef CS333_P4
+#endif //CS333_P4
 extern struct cpu cpus[NCPU];
 extern int ncpu;
 
@@ -56,6 +58,10 @@ struct proc {
   uint cpu_ticks_in;		   // ticks when scheduled
 #ifdef CS333_P3
   struct proc * next;
+#endif
+#ifdef CS333_P4
+  uint priority;
+  int budget;
 #endif
 };
 

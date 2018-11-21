@@ -1,6 +1,6 @@
 # Set flag to correct CS333 project number: 1, 2, ...
 # 0 == original xv6-pdx distribution functionality
-CS333_PROJECT ?= 3
+CS333_PROJECT ?= 5
 PRINT_SYSCALLS ?= 0
 CS333_CFLAGS ?= -DPDX_XV6
 ifeq ($(CS333_CFLAGS), -DPDX_XV6)
@@ -39,7 +39,7 @@ CS333_CFLAGS += -DUSE_BUILTINS -DCS333_P1 -DCS333_P2 \
 	-DCS333_P3P4 -DCS333_P5
 # if P3 and P4 functionality not wanted
 # CS333_CFLAGS += -DCS333_P1 -DUSE_BUILTINS -DCS333_P2 -DCS333_P5
-CS333_UPROGS += _date _time _ps _chgrp  _chmod _chown
+CS333_UPROGS += _date _time _ps #_chgrp  _chmod _chown
 CS333_TPROGS += _p2-test _testsetuid  _testuidgid _p4-test _p5-test
 endif
 
@@ -231,6 +231,9 @@ UPROGS=\
 	_zombie\
 	_ps\
 	_p3-test_c\
+	_promo\
+	_testSched\
+	_setpriotest_c\
 
 UPROGS += $(CS333_UPROGS) $(CS333_TPROGS)
 

@@ -130,6 +130,10 @@ uint			getgid(void);
 uint			getppid(void);
 int				getprocs(uint, struct uproc*);
 #endif
+#ifdef CS333_P4
+int				setpriority(int pid, int priority);
+int				getpriority(int pid);
+#endif //CS333_P4
 
 // swtch.S
 void            swtch(struct context**, struct context*);

@@ -8,5 +8,10 @@ struct stat {
   uint ino;    // Inode number
   short nlink; // Number of links to file
   uint size;   // Size of file in bytes
+#ifdef CS333_P5 
+  uint uid;
+	uint gid;
+	uint mode;
+#endif //CS333_P5
 };
 

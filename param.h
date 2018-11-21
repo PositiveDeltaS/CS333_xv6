@@ -16,7 +16,8 @@
 #define FSSIZE       1000  // size of file system in blocks
 #endif // PDX_XV6
 #ifdef CS333_P1
-#define DEFAULTUID	 0	   // default UID
-#define DEFAULTGID	 0	   // default GID
+#define DEFAULTUID	 0	   // default UID, same for first process AND files created by mkfs when file system is created
+#define DEFAULTGID	 0	   // default GID, see above
+#define DEFAULTMODE   0755  // added for P5
 #endif // CS333
 
