@@ -18,5 +18,6 @@
 #ifdef CS333_P1
 #define DEFAULTUID	 0	   // default UID
 #define DEFAULTGID	 0	   // default GID
+#define DEFAULTMODE  0755
 #endif // CS333
 
