@@ -18,7 +18,7 @@ main (int argc, char *argv[])
     printf(1, "Error when filling table\n");
   else
   {
-	  printf(1, "PID\tName\tUID\tGID\tPPID\tElapsed\tTotal\tState\tSize\n");
+	  printf(1, "PID\tName\tUID\tGID\tPPID\tPrio\tElapsed\tTotal\tState\tSize\n");
 	  for(int i = 0; i < x; ++i)
 	  {
 	    printf(1, "%d\t", table[i].pid);
@@ -26,6 +26,7 @@ main (int argc, char *argv[])
 	    printf(1, "%d\t", table[i].uid);
 	    printf(1, "%d\t", table[i].gid);
 	    printf(1, "%d\t", table[i].ppid);
+	    printf(1, "%d\t", table[i].priority);
 		printf(1, "%d\t", table[i].elapsed_ticks);
 		printf(1, "%d\t", table[i].CPU_total_ticks);
 	    printf(1, "%s\t", table[i].state);

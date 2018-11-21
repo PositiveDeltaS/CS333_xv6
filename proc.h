@@ -10,10 +10,11 @@ struct cpu {
   struct proc *proc;           // The process running on this cpu or null
 };
 
+#ifdef CS333_P4
+#endif //CS333_P4
 extern struct cpu cpus[NCPU];
 extern int ncpu;
 
-//PAGEBREAK: 17
 // Saved registers for kernel context switches.
 // Don't need to save all the segment registers (%cs, etc),
 // because they are constant across kernel contexts.
@@ -56,6 +57,10 @@ struct proc {
   uint cpu_ticks_in;		   // ticks when scheduled
 #ifdef CS333_P3
   struct proc * next;
+#endif
+#ifdef CS333_P4
+  uint priority;
+  int budget;
 #endif
 };
 

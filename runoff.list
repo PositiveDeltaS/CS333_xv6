@@ -95,3 +95,7 @@ uproc.h
 testsetuid.c
 testuidgid.c
 p3-test_c.c
+setpriotest_c.c
+promo.c
+testSched.c
+p4-test.c

@@ -122,8 +122,7 @@ sys_setuid (void)
  	return -1; 
   if(n < 0 || n > 32767)
   	return -1;
-  setuid(n);
-  	return 0;
+  return setuid(n);
 }
 
 int
@@ -138,6 +137,25 @@ sys_setgid (void)
   return setgid(n);
 }
 
+#ifdef CS333_P4
+int
+sys_setpriority(void)
+{
+  int pi;
+  int prio;
+  if(argint(0, &pi) < 0 || argint(1, &prio) < 0)
+    return -1;
+  if(prio < 0 || prio > MAXPRIO)
+    return -1;
+  return setpriority(pi, prio);
+}
+
+int
+sys_getpriority(void)
+{
+  return myproc()->priority;
+}
+#endif //CS333_P4
 int
 sys_getprocs (void)
 {
@@ -171,7 +189,6 @@ sys_getppid(void)
   return ppid;
 }
 #endif // CS333 P2
-
 
 
 

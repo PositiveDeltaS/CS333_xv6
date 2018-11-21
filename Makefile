@@ -1,6 +1,6 @@
 # Set flag to correct CS333 project number: 1, 2, ...
 # 0 == original xv6-pdx distribution functionality
-CS333_PROJECT ?= 3
+CS333_PROJECT ?= 4
 PRINT_SYSCALLS ?= 0
 CS333_CFLAGS ?= -DPDX_XV6
 ifeq ($(CS333_CFLAGS), -DPDX_XV6)
@@ -231,6 +231,9 @@ UPROGS=\
 	_zombie\
 	_ps\
 	_p3-test_c\
+	_promo\
+	_testSched\
+	_setpriotest_c\
 
 UPROGS += $(CS333_UPROGS) $(CS333_TPROGS)
 
@@ -300,44 +303,3 @@ qemu-nox-gdb: fs.img xv6.img .gdbinit
 	@echo "*** Now run 'gdb'." 1>&2
 	$(QEMU) -nographic $(QEMUOPTS) -S $(QEMUGDB)
 
-# CUT HERE
-# prepare dist for students
-# after running make dist, probably want to
-# rename it to rev0 or rev1 or so on and then
-# check in that version.
-
-EXTRA=\
-	mkfs.c ulib.c user.h cat.c echo.c forktest.c grep.c kill.c\
-	ln.c ls.c mkdir.c rm.c stressfs.c usertests.c wc.c zombie.c\
-	printf.c umalloc.c\
-	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
-	.gdbinit.tmpl gdbutil kernel.ld\
-
-dist:
-	rm -rf dist
-	mkdir dist
-	for i in $(FILES); \
-	do \
-		grep -v PAGEBREAK $$i >dist/$$i; \
-	done
-	sed '/CUT HERE/,$$d' Makefile >dist/Makefile
-	echo >dist/runoff.spec
-	cp $(EXTRA) dist
-	chmod a+x dist/*pl
-
-dist-test:
-	rm -rf dist
-	make dist
-	rm -rf dist-test
-	mkdir dist-test
-	cp dist/* dist-test
-	chmod a+x dist/*pl
-	cd dist-test; $(MAKE) run
-
-# update this rule (change rev#) when it is time to
-# make a new revision.
-tar:
-	$(MAKE) dist
-	(tar cf - dist) | gzip >xv6-pdxP$(CS333_PROJECT).tar
-
-.PHONY: dist-test dist

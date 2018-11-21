@@ -103,7 +103,6 @@ void            pipeclose(struct pipe*, int);
 int             piperead(struct pipe*, char*, int);
 int             pipewrite(struct pipe*, char*, int);
 
-//PAGEBREAK: 16
 // proc.c
 int             cpuid(void);
 void            exit(void);
@@ -130,6 +129,10 @@ uint			getgid(void);
 uint			getppid(void);
 int				getprocs(uint, struct uproc*);
 #endif
+#ifdef CS333_P4
+int				setpriority(int pid, int priority);
+int				getpriority(int pid);
+#endif //CS333_P4
 
 // swtch.S
 void            swtch(struct context**, struct context*);

@@ -9,11 +9,11 @@
 // of them loop forever
 
 //#define FREE_TEST
-//#define ROUNDROBIN_TEST
+#define ROUNDROBIN_TEST
 //#define SLEEP_TEST
 //#define KILL_TEST
 //#define EXIT_TEST
-#define WAIT_TEST
+//#define WAIT_TEST
 
 #define SLEEP_TIME 7*TPS
 
