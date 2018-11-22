@@ -3,6 +3,68 @@
 #include "user.h"
 #include "fs.h"
 
+#ifdef CS333_P5
+// this is an ugly series of if statements but it works
+void
+print_mode(struct stat* st)
+{
+  switch (st->type) {
+    case T_DIR: printf(1, "d"); break;
+    case T_FILE: printf(1, "-"); break;
+    case T_DEV: printf(1, "c"); break;
+    default: printf(1, "?");
+  }
+
+  if (st->mode.flags.u_r)
+    printf(1, "r");
+  else
+    printf(1, "-");
+
+  if (st->mode.flags.u_w)
+    printf(1, "w");
+  else
+    printf(1, "-");
+
+  if ((st->mode.flags.u_x) & (st->mode.flags.setuid))
+    printf(1, "S");
+  else if (st->mode.flags.u_x)
+    printf(1, "x");
+  else
+    printf(1, "-");
+
+  if (st->mode.flags.g_r)
+    printf(1, "r");
+  else
+    printf(1, "-");
+
+  if (st->mode.flags.g_w)
+    printf(1, "w");
+  else
+    printf(1, "-");
+
+  if (st->mode.flags.g_x)
+    printf(1, "x");
+  else
+    printf(1, "-");
+
+  if (st->mode.flags.o_r)
+    printf(1, "r");
+  else
+    printf(1, "-");
+
+  if (st->mode.flags.o_w)
+    printf(1, "w");
+  else
+    printf(1, "-");
+
+  if (st->mode.flags.o_x)
+    printf(1, "x");
+  else
+    printf(1, "-");
+
+  return;
+}
+#endif
 
 char*
 fmtname(char *path)
@@ -41,11 +103,18 @@ ls(char *path)
     close(fd);
     return;
   }
-
+#ifdef CS333_P5
+  printf(1, "mode\t\tname\t\tuid\tgid\tinode\tsize\t\n"); 
+#endif //CS333_P5
   switch(st.type){
   case T_FILE:
   case T_DEV:
+#ifdef CS333_P5
+    print_mode(&st);
+    printf(1, "\t%s\t%d\t%d\t%d\t%d\n", fmtname(path), st.uid, st.gid, st.ino, st.size);
+#else
     printf(1, "%s %d %d %d\n", fmtname(path), st.type, st.ino, st.size);
+#endif //CS333_P5
     break;
 
   case T_DIR:
@@ -65,7 +134,12 @@ ls(char *path)
         printf(1, "ls: cannot stat %s\n", buf);
         continue;
       }
+#ifdef CS333_P5
+      print_mode(&st);
+      printf(1, "\t%s\t%d\t%d\t%d\t%d\n", fmtname(buf), st.uid, st.gid, st.ino, st.size);
+#else
       printf(1, "%s %d %d %d\n", fmtname(buf), st.type, st.ino, st.size);
+#endif //CS333_P5
     }
     break;
   }
