@@ -22,6 +22,11 @@ struct inode {
   short minor;
   short nlink;
   uint size;
+#ifdef CS333_P5
+  ushort uid;
+	ushort gid;
+	union mode_t mode;
+#endif //CS333_P5
   uint addrs[NDIRECT+1];
 };
 

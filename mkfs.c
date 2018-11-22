@@ -230,6 +230,11 @@ ialloc(ushort type)
   din.type = xshort(type);
   din.nlink = xshort(1);
   din.size = xint(0);
+#ifdef CS333_P5
+  din.uid = DEFAULTUID;
+	din.gid = DEFAULTGID;
+	din.mode.asInt = DEFAULTMODE;
+#endif //CS333_P5
   winode(inum, &din);
   return inum;
 }
