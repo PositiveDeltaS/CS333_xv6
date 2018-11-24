@@ -42,6 +42,11 @@ int getprocs(uint, struct uproc*);
 int setpriority(int pid, int priority);
 int getpriority(int pid);
 #endif //CS333_P4
+#ifdef CS333_P5
+int chmod(char * pathname, int mode);
+int chown(char * pathname, int owner);
+int chgrp(char * pathname, int group);
+#endif //CS333_P5
 
 // ulib.c
 int stat(char*, struct stat*);

@@ -20,7 +20,6 @@
 #include "fs.h"
 #include "buf.h"
 #include "file.h"
-
 #define min(a, b) ((a) < (b) ? (a) : (b))
 static void itrunc(struct inode*);
 // there should be one superblock per disk device, but we run with
@@ -679,3 +678,24 @@ nameiparent(char *path, char *name)
   return namex(path, 1, name);
 }
 
+#ifdef CS333_P5
+int
+chmod(char * pathname, int mode)
+{
+	struct inode * ino;
+
+	begin_op();
+	if((ino = namei(pathname)) == 0) {
+	  end_op();
+	  return -1;
+  }
+	
+  ilock(ino);
+	ino->mode.asInt = mode;
+  iupdate(ino);
+	iunlock(ino);
+	end_op();
+
+	return 0;
+}
+#endif //CS333_P5

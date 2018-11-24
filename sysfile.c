@@ -442,3 +442,33 @@ sys_pipe(void)
   fd[1] = fd1;
   return 0;
 }
+#ifdef CS333_P5
+int
+sys_chmod(void)
+{
+  int mo; 
+	char * path;
+
+	if((argint(1, &mo) < 0) || (argstr(0, &path) < 0))
+	  return -1;
+	if(mo < 0 || mo > 01777)
+	  return -1;
+  return chmod(path, mo);
+}
+
+int
+sys_chown(void)
+{
+
+  return 0;
+}
+
+int
+sys_chgrp(void)
+{
+
+  return 0;
+}
+
+
+#endif //CS333_P5
