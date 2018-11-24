@@ -459,15 +459,25 @@ sys_chmod(void)
 int
 sys_chown(void)
 {
-
-  return 0;
+  int own;
+	char * path;
+  if(argint(1, &own) < 0 || argstr(0, &path) < 0)
+	  return -1;
+	if(own < 0 || own > 32767)
+	  return -1;
+  return chgrp(path, own);
 }
 
 int
 sys_chgrp(void)
 {
-
-  return 0;
+  int gro;
+	char * path;
+  if(argint(1, &gro) < 0 || argstr(0, &path) < 0)
+	  return -1;
+	if(gro < 0 || gro > 32767)
+	  return -1;
+  return chgrp(path, gro);
 }
 
 

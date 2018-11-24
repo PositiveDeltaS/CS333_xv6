@@ -698,4 +698,44 @@ chmod(char * pathname, int mode)
 
 	return 0;
 }
+
+int
+chown(char * pathname, int owner)
+{
+  struct inode * ino;
+
+	begin_op();
+	if((ino = namei(pathname)) == 0) {
+	  end_op();
+	  return -1;
+  }
+	
+  ilock(ino);
+	ino->uid = owner;
+  iupdate(ino);
+	iunlock(ino);
+	end_op();
+
+  return 0;
+}
+
+int
+chgrp(char * pathname, int group)
+{
+  struct inode * ino;
+
+	begin_op();
+	if((ino = namei(pathname)) == 0) {
+	  end_op();
+	  return -1;
+  }
+	
+  ilock(ino);
+	ino->gid = group;
+  iupdate(ino);
+	iunlock(ino);
+	end_op();
+
+  return 0;
+}
 #endif //CS333_P5

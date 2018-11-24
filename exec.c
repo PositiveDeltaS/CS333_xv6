@@ -6,7 +6,9 @@
 #include "defs.h"
 #include "x86.h"
 #include "elf.h"
-
+#ifdef CS333_P5
+#include "stat.h"
+#endif //CS333_P5
 
 int
 exec(char *path, char **argv)
@@ -32,6 +34,21 @@ exec(char *path, char **argv)
   ilock(ip);
   pgdir = 0;
 
+#ifdef CS333_P5
+	struct stat st;
+	stati(ip, &st);
+	if(curproc->uid == st.uid) {
+		if(st.mode.flags.u_x != 1)
+			goto bad;
+	}
+	else if (curproc->gid == st.gid) {
+		if(st.mode.flags.g_x != 1) 
+			goto bad;
+	}
+	else if (st.mode.flags.o_x != 1)
+		goto bad; 
+#endif //CS333_P5
+
   // Check ELF header
   if(readi(ip, (char*)&elf, 0, sizeof(elf)) != sizeof(elf))
     goto bad;
@@ -40,6 +57,7 @@ exec(char *path, char **argv)
 
   if((pgdir = setupkvm()) == 0)
     goto bad;
+
 
   // Load program into memory.
   sz = 0;
@@ -102,6 +120,10 @@ exec(char *path, char **argv)
   curproc->sz = sz;
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
+#ifdef CS333_P5
+	if(st.mode.flags.setuid == 1)
+	  curproc->uid = st.uid;
+#endif // CS333_P5
   switchuvm(curproc);
   freevm(oldpgdir);
   return 0;
