@@ -1,0 +1,17 @@
+ if (!(argv[1][0] == '0' || argv[1][0] == '1'))
+   bail(argv[0]);
+
+ if (!(argv[1][1] >= '0' && argv[1][1] <= '7'))
+   bail(argv[0]);
+
+ if (!(argv[1][2] >= '0' && argv[1][2] <= '7'))
+   bail(argv[0]);
+
+ if (!(argv[1][3] >= '0' && argv[1][3] <= '7'))
+   bail(argv[0]);
+
+ // convert octal to decimal.  we have no pow() function
+ mode += ((int)(argv[1][0] - '0') * (8*8*8));
+ mode += ((int)(argv[1][1] - '0') * (8*8));
+ mode += ((int)(argv[1][2] - '0') * (8));
+ mode +=  (int)(argv[1][3] - '0');

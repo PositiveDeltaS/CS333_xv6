@@ -24,8 +24,20 @@ main(int argc, char * argv[])
     printf(1, "Invalid command\n");
 		exit();
 	}
+ if (!(argv[1][0] == '0' || argv[1][0] == '1'))
+   bail(argv[0]);
+
+ if (!(argv[1][1] >= '0' && argv[1][1] <= '7'))
+   bail(argv[0]);
+
+ if (!(argv[1][2] >= '0' && argv[1][2] <= '7'))
+   bail(argv[0]);
+
+ if (!(argv[1][3] >= '0' && argv[1][3] <= '7'))
+   bail(argv[0]);
+
   int mode = atoo(argv[1]);
-	if(mode < 0 || mode > 01777)
+	if(mode < 0 || *argv[1] > 01777)
 	  bail(argv[0]);
    
 	if(chmod(argv[2], mode) < 0)

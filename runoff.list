@@ -101,3 +101,4 @@ p4-test.c
 chmod.c
 chown.c
 chgrp.c
+p5-test.c

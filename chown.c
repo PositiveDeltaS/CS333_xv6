@@ -18,7 +18,7 @@ main(int argc, char * argv[])
 		exit();
 	}
    
-	if(chgrp(argv[2], owner) < 0)
+	if(chown(argv[2], owner) < 0)
 	  printf(1, "Could not set UID\n");
 
 #endif //CS333_P5
